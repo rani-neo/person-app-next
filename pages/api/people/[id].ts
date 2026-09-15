@@ -5,6 +5,7 @@ import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
 import { Person } from '../../../types/types';
 import { Database } from '../Database';
+import { neon } from '@neondatabase/serverless';
 
 // Calculate the path to db.json
 const __dirname = dirname(fileURLToPath(import.meta.url));
