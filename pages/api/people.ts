@@ -1,50 +1,55 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { Low } from 'lowdb';
-import { JSONFile } from 'lowdb/node';
-import { Person } from '../../types/types';  // Adjust the path based on your project structure.
-import { Database } from './Database';
+import { neon } from '@neondatabase/serverless';
 
+const sql = neon(process.env.DATABASE_URL!);
 
-// db.json file path
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const file = join(__dirname, 'db.json');
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  try {
 
-// Configure lowdb to write data to JSON file
+    // GET ALL PEOPLE
+    if (req.method === 'GET') {
+      const people = await sql`
+        SELECT id, firstname, lastname, phone
+        FROM people
+        ORDER BY id ASC
+      `;
 
+      return res.status(200).json(people);
+    }
 
-const adapter = new JSONFile(file);
-const defaultData: Database = { people: [] };
+    // ADD NEW PERSON
+    if (req.method === 'POST') {
+      const { firstname, lastname, phone } = req.body;
 
-const db = new Low(adapter, defaultData);
+      if (!firstname || !lastname || !phone) {
+        return res.status(400).json({
+          error: 'Firstname, lastname and phone are required',
+        });
+      }
 
+      const result = await sql`
+        INSERT INTO people (firstname, lastname, phone)
+        VALUES (${firstname}, ${lastname}, ${phone})
+        RETURNING id, firstname, lastname, phone
+      `;
 
-export default async (req: NextApiRequest, res: NextApiResponse) => {
-  // Read the data before accessing it
-  await db.read();
+      return res.status(201).json(result[0]);
+    }
 
-  if (req.method === 'GET') {
-    const people = (db.data as Database).people;
-    res.status(200).json(people);
+    res.setHeader('Allow', ['GET', 'POST']);
 
-  } else if (req.method === 'POST') {
-    const newPerson: Person = req.body;
-    const database = db.data as Database; // Asserting the type
-    const data = db.data as Database;
+    return res.status(405).json({
+      error: 'Method not allowed',
+    });
 
-  // Get the current maximum ID from the database
+  } catch (error) {
+    console.error('Database error:', error);
 
-  const maxId = data.people.reduce((max: number, person: Person) => (person.id > max ? person.id : max), 0);
-
-  // Automatically increment the ID
-  newPerson.id = maxId + 1;
-
-    database.people.push(newPerson);
-    await db.write();
-    res.status(200).json(newPerson);
-    
-  } else {
-    res.status(405).end();  // Method Not Allowed
+    return res.status(500).json({
+      error: 'Internal server error',
+    });
   }
-};
+}
